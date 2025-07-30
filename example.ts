@@ -1,4 +1,11 @@
-import { getAuthCredentials, listProjects, updateRequest, uploadScreenshot } from './index';
+import {
+  deleteScreenshot,
+  getAuthCredentials,
+  listProjects,
+  Project,
+  updateRequest,
+  uploadScreenshot
+} from './index';
 import fs from 'fs';
 
 // https://chrome.google.comwebstore/devconsole/<publisher_id>/<extension_id>
@@ -18,8 +25,8 @@ async function run() {
     authData = await getAuthCredentials();
     fs.writeFileSync(CACHED_AUTH_DATA_FILE, JSON.stringify(authData));
   }
-  const projects = await listProjects({ publisherId: PUBLISHER_ID, authData });
-  const selectedProject = projects.find((p: any) => p.extId === EXT_ID);
+  const projects: Project[] = await listProjects({ publisherId: PUBLISHER_ID, authData });
+  const selectedProject = <Project>projects.find((p: any) => p.extId === EXT_ID);
   await updateRequest({
     project: selectedProject,
     authData,
@@ -28,28 +35,35 @@ async function run() {
       'zh-CN': 'Test Chinese'
     }
   });
+  // Clear all existing screenshots
+  for (const screenshot of selectedProject.screenshots) {
+    for (const imageUrl of screenshot.imageUrls) {
+      await deleteScreenshot({
+        project: selectedProject,
+        authData,
+        imageUrl
+      });
+    }
+  }
   await uploadScreenshot({
-    publisherId: PUBLISHER_ID,
-    extId: EXT_ID,
+    project: selectedProject,
     imageFile: 'screenshot-en.png',
     locale: 'en',
     authData
   });
   await uploadScreenshot({
-    publisherId: PUBLISHER_ID,
-    extId: EXT_ID,
+    project: selectedProject,
     imageFile: 'screenshot-zh-CN.png',
     locale: 'zh-CN',
     authData
   });
   // No setting locale parameter will upload the screenshot as global
   await uploadScreenshot({
-    publisherId: PUBLISHER_ID,
-    extId: EXT_ID,
+    project: selectedProject,
     imageFile: 'screenshot-global.png',
     authData
   });
-  console.log(`Projects: ${projects}`);
+  console.log(`All done`);
 }
 
 run();

@@ -14,6 +14,22 @@ enum ImageUploadType {
   SCREENSHOT = 4
 }
 
+export interface Screenshot {
+  locale: string;
+  imageUrls: string[];
+}
+
+export interface Project {
+  publisherId: string;
+  extId: string;
+  isPublished: boolean;
+  publicKeyArtifact: any;
+  screenshots: Array<Screenshot>;
+
+  // Raw protobuf data array. Avoid using this directly.
+  detailArray: any;
+}
+
 export async function getAuthCredentials(): Promise<AuthData> {
   let browser: Browser | undefined;
   let page: Page | undefined;
@@ -55,7 +71,7 @@ export async function listProjects({
 }: {
   publisherId: string;
   authData: AuthData;
-}) {
+}): Promise<Project[]> {
   const { data } = await axios.post(
     `${URL_BASE}/_/SnapcatUi/data/batchexecute`,
     {
@@ -69,10 +85,15 @@ export async function listProjects({
   const parsedData = parseData(data);
   const projects = JSON.parse(parsedData[0][2]);
   return projects[0].map((p: any) => ({
+    publisherId,
     extId: p[0],
     detailArray: p[1],
     isPublished: !!p[2],
-    publicKeyArtifact: p[3]
+    publicKeyArtifact: p[3],
+    screenshots: (p[1][14] || []).map((item: any) => ({
+      locale: item[0],
+      imageUrls: (item[7] || []).map((imageItem: any) => imageItem[0]?.[1])
+    }))
   }));
 }
 
@@ -86,7 +107,7 @@ export async function updateRequest({
   officialUrl,
   homepageUrl
 }: {
-  project: any;
+  project: Project;
   authData: AuthData;
   multiLangDescriptions?: Record<string, string>;
   description?: string;
@@ -142,24 +163,60 @@ export async function updateRequest({
   return parsedData;
 }
 
+export async function deleteScreenshot({
+  project,
+  imageUrl,
+  authData
+}: {
+  project: Project;
+  imageUrl: string;
+  authData: AuthData;
+}) {
+  await axios.post(
+    `${URL_BASE}/_/SnapcatUi/data/batchexecute`,
+    {
+      'f.req': JSON.stringify([
+        [['AaxNP', JSON.stringify([project.extId, [imageUrl]]), null, 'generic']]
+      ]),
+      at: authData.AT
+    },
+    {
+      headers: getHeaders(authData)
+    }
+  );
+
+  const { data } = await axios.post(
+    `${URL_BASE}/_/SnapcatUi/data/batchexecute`,
+    {
+      'f.req': JSON.stringify([
+        [
+          ['Mt2BP', JSON.stringify([project.extId]), null, '1'],
+          ['Gloc4c', JSON.stringify([project.extId]), null, '2']
+        ]
+      ]),
+      at: authData.AT
+    },
+    {
+      headers: getHeaders(authData)
+    }
+  );
+  return data;
+}
+
 /**
- *
- * @param publisherId
- * @param extId
- * @param imageUploadType
- * @param imageFile
- * @param locale Leave blank to set the screenshot as global screenshot. Otherwise it will set to localized screenshot.
+ * Upload a screenshot to the project.
+ * @param project The selected project to modify
+ * @param imageFile Path to the screenshot file to upload
+ * @param locale Leave blank to set the screenshot as global screenshot. Otherwise, it will set to localized screenshot.
  * @param authData
  */
 export async function uploadScreenshot({
-  publisherId,
-  extId,
+  project,
   imageFile,
   locale,
   authData
 }: {
-  publisherId: string;
-  extId: string;
+  project: Project;
   imageFile: string;
   locale?: string;
   authData: AuthData;
@@ -176,14 +233,14 @@ export async function uploadScreenshot({
         {
           inlined: {
             name: 'item_id',
-            content: extId,
+            content: project.extId,
             contentType: 'text/plain'
           }
         },
         {
           inlined: {
             name: 'publisher_id',
-            content: publisherId,
+            content: project.publisherId,
             contentType: 'text/plain'
           }
         },
