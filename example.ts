@@ -3,8 +3,8 @@ import fs from 'fs';
 
 // https://chrome.google.comwebstore/devconsole/<publisher_id>/<extension_id>
 
-const PUBLISHER_ID = '<publisher_id>';
-const EXT_ID = '<ext-id>';
+const PUBLISHER_ID = <string>process.env.PUBLISHER_ID;
+const EXT_ID = <string>process.env.EXT_ID;
 
 const CACHED_AUTH_DATA_FILE = './cached-auth-data.json';
 
