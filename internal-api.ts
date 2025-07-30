@@ -10,6 +10,10 @@ export interface AuthData {
   AT: string;
 }
 
+enum ImageUploadType {
+  SCREENSHOT = 4
+}
+
 export async function getAuthCredentials(): Promise<AuthData> {
   let browser: Browser | undefined;
   let page: Page | undefined;
@@ -138,59 +142,68 @@ export async function updateRequest({
   return parsedData;
 }
 
-export async function uploadImage({
+/**
+ *
+ * @param publisherId
+ * @param extId
+ * @param imageUploadType
+ * @param imageFile
+ * @param locale Leave blank to set the screenshot as global screenshot. Otherwise it will set to localized screenshot.
+ * @param authData
+ */
+export async function uploadScreenshot({
   publisherId,
   extId,
-  imageUploadType,
   imageFile,
+  locale,
   authData
 }: {
   publisherId: string;
   extId: string;
-  imageUploadType: string;
   imageFile: string;
+  locale?: string;
   authData: AuthData;
 }) {
   const imageStat = fs.statSync(imageFile);
-  const { data } = await axios.post(
-    'https://chrome.google.com/webstore/developer/upload',
-    JSON.stringify({
-      protocolVersion: '0.8',
-      createSessionRequest: {
-        // @ts-ignore
-        fields: [
-          {
-            external: { name: 'file', filename: imageFile, put: {}, size: imageStat.size }
-          },
-          {
-            inlined: {
-              name: 'item_id',
-              content: extId,
-              contentType: 'text/plain'
-            }
-          },
-          {
-            inlined: {
-              name: 'publisher_id',
-              content: `uuid:${publisherId}`,
-              contentType: 'text/plain'
-            }
-          },
-          {
-            inlined: {
-              name: 'image_upload_type',
-              content: imageUploadType,
-              contentType: 'text/plain'
-            }
-          },
-          { inlined: { name: 'language_code', content: '', contentType: 'text/plain' } }
-        ]
-      }
-    }),
-    {
-      headers: getHeaders(authData)
+  const formData = JSON.stringify({
+    protocolVersion: '0.8',
+    createSessionRequest: {
+      // @ts-ignore
+      fields: [
+        {
+          external: { name: 'file', filename: imageFile, put: {}, size: imageStat.size }
+        },
+        {
+          inlined: {
+            name: 'item_id',
+            content: extId,
+            contentType: 'text/plain'
+          }
+        },
+        {
+          inlined: {
+            name: 'publisher_id',
+            content: publisherId,
+            contentType: 'text/plain'
+          }
+        },
+        {
+          inlined: {
+            name: 'image_upload_type',
+            content: ImageUploadType.SCREENSHOT.toString(),
+            contentType: 'text/plain'
+          }
+        },
+        { inlined: { name: 'language_code', content: locale, contentType: 'text/plain' } }
+      ]
     }
-  );
+  });
+  const { data } = await axios({
+    method: 'POST',
+    url: 'https://chrome.google.com/webstore/developer/uploadv4',
+    data: formData,
+    headers: getHeaders(authData)
+  });
   const putUrl = data.sessionStatus.externalFieldTransfers[0].putInfo.url;
   const { data: uploadedResponse } = await axios.post(putUrl, fs.createReadStream(imageFile));
   if (uploadedResponse.sessionStatus.state !== 'FINALIZED') {
@@ -204,7 +217,9 @@ function parseData(data: string) {
 
 function getHeaders(authData: AuthData) {
   return {
-    'content-type': 'application/x-www-form-urlencoded',
+    accept: '*/*',
+    'x-guploader-client-info': 'mechanism=scotty xhr resumable; clientVersion=788012804',
+    'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
     cookie: authData.cookieString
   };
 }
